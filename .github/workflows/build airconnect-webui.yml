@@ -1,6 +1,9 @@
 name: 仅编译 WebUI 二进制文件
 on:
-  workflow_dispatch:  # 手动触发
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
@@ -12,15 +15,16 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: 1.23
+          cache: false
 
-      - name: 编译 ARM64 版本（你的设备是 arm64）
+      - name: 编译 ARM64 二进制
         run: |
           CGO_ENABLED=0 \
           GOOS=linux \
           GOARCH=arm64 \
           go build -o airconnect-webui main.go
 
-      - name: 上传二进制文件供下载
+      - name: 上传文件
         uses: actions/upload-artifact@v4
         with:
           name: airconnect-webui
