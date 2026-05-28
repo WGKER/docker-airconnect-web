@@ -6,7 +6,8 @@ import (
 	"html/template"
 	"net/http"
 	"os"
-	"syscall"
+	"os/exec"
+	"time"
 )
 
 type AirUPnP struct {
@@ -127,9 +128,12 @@ func saveConfig(config *AirUPnP) error {
 	return os.WriteFile(configPath, append([]byte(xml.Header), data...), 0644)
 }
 
+// ✅ 官方镜像原生重启命令（100% 适配 /init s6-rc）
 func restartAirConnect() {
-	pid := os.Getpid()
-	syscall.Kill(pid, syscall.SIGTERM)
+	// 等待 1 秒确保配置写入完成
+	time.Sleep(1 * time.Second)
+	// 镜像自带的 s6 服务重启命令（官方标准方式）
+	exec.Command("s6-rc", "restart", "airupnp").Run()
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
@@ -160,7 +164,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			msg = "❌ 保存失败"
 		} else {
-			msg = "✅ 保存成功，正在重启服务..."
+			msg = "✅ 保存成功，服务已自动重启生效"
 			go restartAirConnect()
 		}
 	}
