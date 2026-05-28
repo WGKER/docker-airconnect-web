@@ -50,7 +50,7 @@ const htmlTemplate = `
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>AirConnect 管理</title>
+    <title>AirConnect 设置</title>
     <style>
         * {box-sizing:border-box; margin:0; padding:0; font-family:Arial, sans-serif;}
         body {background:#f5f7fa; padding:20px; max-width:700px; margin:0 auto;}
@@ -72,20 +72,20 @@ const htmlTemplate = `
 </head>
 <body>
     <div class="card">
-        <h1>🔊 AirConnect 音箱管理</h1>
+        <h1>🔊 AirConnect 设置</h1>
         {{if .Msg}}
         <div class="msg">{{.Msg}}</div>
         {{end}}
         <form method="post">
-            <h2>🌍 全局总开关</h2>
+            <h2>🌍 全局转换</h2>
             <div class="item">
-                <span class="name">总开关</span>
+                <span class="name">扫描开关</span>
                 <label class="toggle">
                     <input type="checkbox" name="global_enabled" {{if eq .Config.Common.Enabled 1}}checked{{end}}>
                     <span class="slider"></span>
                 </label>
             </div>
-            <h2>🎵 音箱独立开关</h2>
+            <h2>🎵 音箱分控</h2>
             {{range $index, $device := .Config.Devices}}
             <div class="item">
                 <span class="name">{{$device.Name}}</span>
