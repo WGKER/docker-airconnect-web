@@ -6,11 +6,9 @@ import (
 	"html/template"
 	"net/http"
 	"os"
-	"strconv"
 	"syscall"
 )
 
-// XML 结构体定义
 type AirUPnP struct {
 	XMLName    xml.Name `xml:"airupnp"`
 	Common     Common   `xml:"common"`
@@ -19,7 +17,7 @@ type AirUPnP struct {
 	UtilLog    string   `xml:"util_log"`
 	RaopLog    string   `xml:"raop_log"`
 	LogLimit   int      `xml:"log_limit"`
-	MaxPlayers int      `xml:"max_players"`
+MaxPlayers int      `xml:"max_players"`
 	Binding    string   `xml:"binding"`
 	Ports      string   `xml:"ports"`
 	Devices    []Device `xml:"device"`
@@ -47,7 +45,6 @@ type Device struct {
 
 const configPath = "/config/config.xml"
 
-// 网页模板：滑动开关 + 自动重启生效
 const htmlTemplate = `
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -65,8 +62,6 @@ const htmlTemplate = `
         .save {width:100%; background:#3498db; color:white; border:none; padding:14px; border-radius:12px; font-size:16px; margin-top:20px; cursor:pointer; font-weight:bold;}
         .save:hover {background:#2980b9;}
         .msg {text-align:center; color:#27ae60; margin:14px 0; font-weight:bold;}
-
-        /* 滑动开关 */
         .toggle {position:relative; width:50px; height:26px;}
         .toggle input {opacity:0; width:0; height:0;}
         .slider {position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background:#ccc; transition:.3s; border-radius:34px;}
@@ -78,11 +73,9 @@ const htmlTemplate = `
 <body>
     <div class="card">
         <h1>🔊 AirConnect 音箱管理</h1>
-
         {{if .Msg}}
         <div class="msg">{{.Msg}}</div>
         {{end}}
-
         <form method="post">
             <h2>🌍 全局总开关</h2>
             <div class="item">
@@ -92,7 +85,6 @@ const htmlTemplate = `
                     <span class="slider"></span>
                 </label>
             </div>
-
             <h2>🎵 音箱独立开关</h2>
             {{range $index, $device := .Config.Devices}}
             <div class="item">
@@ -103,8 +95,7 @@ const htmlTemplate = `
                 </label>
             </div>
             {{end}}
-
-            <button class="save" type="submit">💾 保存并自动重启生效</button>
+            <button class="save" type="submit">💾 保存并重启生效</button>
         </form>
     </div>
 </body>
@@ -116,7 +107,6 @@ type PageData struct {
 	Msg    string
 }
 
-// 读取配置
 func loadConfig() (*AirUPnP, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
@@ -127,7 +117,6 @@ func loadConfig() (*AirUPnP, error) {
 	return &config, err
 }
 
-// 保存配置
 func saveConfig(config *AirUPnP) error {
 	data, err := xml.MarshalIndent(config, "", "  ")
 	if err != nil {
@@ -136,7 +125,6 @@ func saveConfig(config *AirUPnP) error {
 	return os.WriteFile(configPath, append([]byte(xml.Header), data...), 0644)
 }
 
-// 重启 AirConnect 主进程（容器内重启）
 func restartAirConnect() {
 	pid := os.Getpid()
 	syscall.Kill(pid, syscall.SIGTERM)
@@ -151,35 +139,30 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	msg := ""
 	if r.Method == http.MethodPost {
-		// 全局开关
-		global := 0
 		if r.PostFormValue("global_enabled") != "" {
-			global = 1
+			config.Common.Enabled = 1
+		} else {
+			config.Common.Enabled = 0
 		}
-		config.Common.Enabled = global
 
-		// 设备开关
 		for i := range config.Devices {
-			val := r.PostFormValue(fmt.Sprintf("device_%d", i))
-			if val != "" {
+			key := fmt.Sprintf("device_%d", i)
+			if r.PostFormValue(key) != "" {
 				config.Devices[i].Enabled = 1
 			} else {
 				config.Devices[i].Enabled = 0
 			}
 		}
 
-		// 保存
 		err := saveConfig(config)
 		if err != nil {
 			msg = "❌ 保存失败"
 		} else {
 			msg = "✅ 保存成功，正在重启服务..."
-			// 自动重启生效
 			go restartAirConnect()
 		}
 	}
 
-	// 渲染页面
 	tpl, _ := template.New("ui").Parse(htmlTemplate)
 	tpl.Execute(w, PageData{Config: config, Msg: msg})
 }
