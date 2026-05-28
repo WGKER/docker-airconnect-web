@@ -7,9 +7,10 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"syscall"
 )
 
-// XML 结构体定义 与配置文件完全匹配
+// XML 结构体定义
 type AirUPnP struct {
 	XMLName    xml.Name `xml:"airupnp"`
 	Common     Common   `xml:"common"`
@@ -44,134 +45,147 @@ type Device struct {
 	Enabled int    `xml:"enabled"`
 }
 
-// 配置文件路径（容器内路径）
 const configPath = "/config/config.xml"
 
-// 页面模板
+// 网页模板：滑动开关 + 自动重启生效
 const htmlTemplate = `
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>AirConnect 管理面板</title>
+    <title>AirConnect 管理</title>
     <style>
-        * {box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, sans-serif;}
-        body {background: #f5f5f5; padding: 20px; max-width: 800px; margin: 0 auto;}
-        .card {background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);}
-        h1 {color: #2c3e50; margin-bottom: 20px; text-align: center;}
-        h2 {color: #34495e; margin: 15px 0; font-size: 18px;}
-        .switch {margin: 12px 0; display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #fafafa; border-radius: 6px;}
-        label {font-size: 16px; color: #2c3e50; font-weight: 500;}
-        button {background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-size: 16px; margin-top: 10px;}
-        button:hover {background: #2980b9;}
-        .status {color: #27ae60; margin-top: 15px; text-align: center; font-weight: bold;}
+        * {box-sizing:border-box; margin:0; padding:0; font-family:Arial, sans-serif;}
+        body {background:#f5f7fa; padding:20px; max-width:700px; margin:0 auto;}
+        .card {background:white; padding:24px; border-radius:16px; margin-bottom:20px; box-shadow:0 2px 12px rgba(0,0,0,0.08);}
+        h1 {color:#2d3748; margin-bottom:24px; text-align:center; font-size:22px;}
+        h2 {color:#4a5568; margin:20px 0 12px; font-size:16px; border-left:4px solid #3498db; padding-left:10px;}
+        .item {display:flex; justify-content:space-between; align-items:center; padding:14px 10px; border-bottom:1px solid #f1f1f1;}
+        .name {font-size:15px; color:#2d3748; font-weight:500;}
+        .save {width:100%; background:#3498db; color:white; border:none; padding:14px; border-radius:12px; font-size:16px; margin-top:20px; cursor:pointer; font-weight:bold;}
+        .save:hover {background:#2980b9;}
+        .msg {text-align:center; color:#27ae60; margin:14px 0; font-weight:bold;}
+
+        /* 滑动开关 */
+        .toggle {position:relative; width:50px; height:26px;}
+        .toggle input {opacity:0; width:0; height:0;}
+        .slider {position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background:#ccc; transition:.3s; border-radius:34px;}
+        .slider:before {position:absolute; content:""; height:20px; width:20px; left:3px; bottom:3px; background:white; transition:.3s; border-radius:50%;}
+        input:checked + .slider {background:#3498db;}
+        input:checked + .slider:before {transform:translateX(24px);}
     </style>
 </head>
 <body>
     <div class="card">
-        <h1>AirConnect 音箱管理</h1>
+        <h1>🔊 AirConnect 音箱管理</h1>
+
         {{if .Msg}}
-        <div class="status">{{.Msg}}</div>
+        <div class="msg">{{.Msg}}</div>
         {{end}}
 
-        <!-- 总开关 -->
         <form method="post">
-            <h2>全局总开关</h2>
-            <div class="switch">
-                <label>AirConnect 总开关</label>
-                <select name="global_enabled">
-                    <option value="1" {{if eq .Config.Common.Enabled 1}}selected{{end}}>开启</option>
-                    <option value="0" {{if eq .Config.Common.Enabled 0}}selected{{end}}>关闭</option>
-                </select>
+            <h2>🌍 全局总开关</h2>
+            <div class="item">
+                <span class="name">总开关</span>
+                <label class="toggle">
+                    <input type="checkbox" name="global_enabled" {{if eq .Config.Common.Enabled 1}}checked{{end}}>
+                    <span class="slider"></span>
+                </label>
             </div>
 
-            <h2>音箱独立开关</h2>
+            <h2>🎵 音箱独立开关</h2>
             {{range $index, $device := .Config.Devices}}
-            <div class="switch">
-                <label>{{$device.Name}}</label>
-                <select name="device_{{$index}}">
-                    <option value="1" {{if eq $device.Enabled 1}}selected{{end}}>开启</option>
-                    <option value="0" {{if eq $device.Enabled 0}}selected{{end}}>关闭</option>
-                </select>
+            <div class="item">
+                <span class="name">{{$device.Name}}</span>
+                <label class="toggle">
+                    <input type="checkbox" name="device_{{$index}}" {{if eq $device.Enabled 1}}checked{{end}}>
+                    <span class="slider"></span>
+                </label>
             </div>
             {{end}}
 
-            <button type="submit">保存配置</button>
+            <button class="save" type="submit">💾 保存并自动重启生效</button>
         </form>
     </div>
 </body>
 </html>
 `
 
-// 页面数据
 type PageData struct {
 	Config *AirUPnP
 	Msg    string
 }
 
-// 读取XML配置
+// 读取配置
 func loadConfig() (*AirUPnP, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, err
 	}
 	var config AirUPnP
-	if err := xml.Unmarshal(data, &config); err != nil {
-		return nil, err
-	}
-	return &config, nil
+	err = xml.Unmarshal(data, &config)
+	return &config, err
 }
 
-// 保存XML配置
+// 保存配置
 func saveConfig(config *AirUPnP) error {
 	data, err := xml.MarshalIndent(config, "", "  ")
 	if err != nil {
 		return err
 	}
-	// 写入文件
 	return os.WriteFile(configPath, append([]byte(xml.Header), data...), 0644)
 }
 
-// Web处理函数
+// 重启 AirConnect 主进程（容器内重启）
+func restartAirConnect() {
+	pid := os.Getpid()
+	syscall.Kill(pid, syscall.SIGTERM)
+}
+
 func handler(w http.ResponseWriter, r *http.Request) {
 	config, err := loadConfig()
 	if err != nil {
-		http.Error(w, "加载配置失败: "+err.Error(), 500)
+		http.Error(w, "加载配置失败", 500)
 		return
 	}
 
 	msg := ""
-	// POST 提交保存
 	if r.Method == http.MethodPost {
 		// 全局开关
-		globalVal := r.PostFormValue("global_enabled")
-		globalEnabled, _ := strconv.Atoi(globalVal)
-		config.Common.Enabled = globalEnabled
+		global := 0
+		if r.PostFormValue("global_enabled") != "" {
+			global = 1
+		}
+		config.Common.Enabled = global
 
-		// 遍历设备
+		// 设备开关
 		for i := range config.Devices {
-			key := fmt.Sprintf("device_%d", i)
-			val := r.PostFormValue(key)
-			enabled, _ := strconv.Atoi(val)
-			config.Devices[i].Enabled = enabled
+			val := r.PostFormValue(fmt.Sprintf("device_%d", i))
+			if val != "" {
+				config.Devices[i].Enabled = 1
+			} else {
+				config.Devices[i].Enabled = 0
+			}
 		}
 
 		// 保存
-		if err := saveConfig(config); err != nil {
-			msg = "保存失败：" + err.Error()
+		err := saveConfig(config)
+		if err != nil {
+			msg = "❌ 保存失败"
 		} else {
-			msg = "✅ 配置已保存！重启 AirConnect 容器生效"
+			msg = "✅ 保存成功，正在重启服务..."
+			// 自动重启生效
+			go restartAirConnect()
 		}
 	}
 
 	// 渲染页面
-	tpl, _ := template.New("webui").Parse(htmlTemplate)
+	tpl, _ := template.New("ui").Parse(htmlTemplate)
 	tpl.Execute(w, PageData{Config: config, Msg: msg})
 }
 
 func main() {
 	http.HandleFunc("/", handler)
-	fmt.Println("WebUI 启动在 http://0.0.0.0:8087")
-	// 监听8087端口
+	fmt.Println("WebUI 已启动 :8087")
 	http.ListenAndServe(":8087", nil)
 }
