@@ -17,7 +17,7 @@ type AirUPnP struct {
 	UtilLog    string   `xml:"util_log"`
 	RaopLog    string   `xml:"raop_log"`
 	LogLimit   int      `xml:"log_limit"`
-MaxPlayers int      `xml:"max_players"`
+	MaxPlayers int      `xml:"max_players"`
 	Binding    string   `xml:"binding"`
 	Ports      string   `xml:"ports"`
 	Devices    []Device `xml:"device"`
@@ -68,6 +68,7 @@ const htmlTemplate = `
         .slider:before {position:absolute; content:""; height:20px; width:20px; left:3px; bottom:3px; background:white; transition:.3s; border-radius:50%;}
         input:checked + .slider {background:#3498db;}
         input:checked + .slider:before {transform:translateX(24px);}
+        .version {text-align:center; color:#999; font-size:12px; margin-top:16px;}
     </style>
 </head>
 <body>
@@ -98,6 +99,7 @@ const htmlTemplate = `
             <button class="save" type="submit">💾 保存并重启生效</button>
         </form>
     </div>
+    <div class="version">AirConnect 版本：1.9.3</div>
 </body>
 </html>
 `
