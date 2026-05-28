@@ -1,0 +1,37 @@
+name: 手动构建 airconnect-web 镜像
+on:
+  workflow_dispatch:  # 只允许手动触发
+
+env:
+  IMAGE_NAME: airconnect-webui
+  IMAGE_TAG: 1.9.3
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.22
+
+      - name: 编译 WebUI
+        run: CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o airconnect-webui main.go
+
+      - name: 设置 Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 构建 Docker 镜像
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          outputs: type=docker,dest=/tmp/${{ env.IMAGE_NAME }}-${{ env.IMAGE_TAG }}.tar
+          tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+
+      - name: 上传镜像供下载
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.IMAGE_NAME }}-${{ env.IMAGE_TAG }}.tar
+          path: /tmp/${{ env.IMAGE_NAME }}-${{ env.IMAGE_TAG }}.tar
